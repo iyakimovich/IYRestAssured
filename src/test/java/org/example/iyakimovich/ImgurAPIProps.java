@@ -1,4 +1,4 @@
-package org.example;
+package org.example.iyakimovich;
 
 public class ImgurAPIProps {
     public static final String API_PUBLIC_URL = "https://api.imgur.com/3";

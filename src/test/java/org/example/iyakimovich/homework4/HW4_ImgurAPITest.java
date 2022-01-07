@@ -1,26 +1,32 @@
-package org.example;
+package org.example.iyakimovich.homework4;
 
 import io.qameta.allure.restassured.AllureRestAssured;
 import io.restassured.RestAssured;
-import org.junit.jupiter.api.*;
-
-import static io.restassured.RestAssured.given;
-import static org.junit.jupiter.api.Assertions.*;
-
+import io.restassured.builder.RequestSpecBuilder;
+import io.restassured.builder.ResponseSpecBuilder;
+import io.restassured.http.ContentType;
+import io.restassured.specification.RequestSpecification;
+import io.restassured.specification.ResponseSpecification;
+import org.example.iyakimovich.ImgurAPIProps;
+import org.example.iyakimovich.homework4.dto.CommentDTO;
+import org.example.iyakimovich.homework4.dto.ImageDTO;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 
+import static io.restassured.RestAssured.given;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class ImgurAPITest
+public class HW4_ImgurAPITest
 {
-    private static final Logger LOGGER = LoggerFactory.getLogger(ImgurAPITest.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(HW4_ImgurAPITest.class);
 
     private static final Properties props = new Properties();
 
@@ -31,7 +37,11 @@ public class ImgurAPITest
     private static String imageId;
     private static String pin;
 
-    static Map<String, String> headers = new HashMap<>();
+    //private static Map<String, String> headers = new HashMap<>();
+
+    private static ResponseSpecification responseSpecHTTP200;
+    private static ResponseSpecification responseSpecHTTP409;
+    private static RequestSpecification requestSpecHeaders;
 
     @BeforeAll
     public static void runBeforeAllTests() throws IOException {
@@ -50,7 +60,24 @@ public class ImgurAPITest
         imageId = props.getProperty("imageId");
         pin = props.getProperty("pin");
 
-        headers.put("Authorization", "Bearer " + accessToken);
+        //headers.put("Authorization", "Bearer " + accessToken);
+
+        responseSpecHTTP200 = new ResponseSpecBuilder()
+                .expectStatusCode(200)
+                .expectContentType(ContentType.JSON)
+                .build();
+
+        responseSpecHTTP409 = new ResponseSpecBuilder()
+                .expectStatusCode(409)
+                .expectContentType(ContentType.JSON)
+                .build();
+
+        requestSpecHeaders = new RequestSpecBuilder().
+                addHeader("Authorization", "Bearer " + accessToken)
+                .build();
+
+        //use headers globally
+        RestAssured.requestSpecification = requestSpecHeaders;
 
         LOGGER.info("runBeforeAllTests() - done");
     }
@@ -60,12 +87,10 @@ public class ImgurAPITest
     public void testAccountImageCount() {
         LOGGER.info("testAccountImageCount(): started");
         int count = given()
-                .headers(headers)
                 .when()
                 .get(ImgurAPIProps.API_ACCOUNT_URL + "/{username}/images/count", username)
                 .then()
-                .statusCode(200)
-                .contentType("application/json")
+                .spec(responseSpecHTTP200)
                 .extract()
                 .response()
                 .jsonPath()
@@ -80,12 +105,10 @@ public class ImgurAPITest
     public void testAccountImageIDs() {
         LOGGER.info("testAccountImageIDs(): started");
         List<String> list = given()
-                .headers(headers)
                 .when()
                 .get(ImgurAPIProps.API_ACCOUNT_URL + "/{username}/images/ids/", username)
                 .then()
-                .statusCode(200)
-                .contentType("application/json")
+                .spec(responseSpecHTTP200)
                 .extract()
                 .response()
                 .jsonPath()
@@ -96,38 +119,33 @@ public class ImgurAPITest
         String imageId = list.get(0);
         LOGGER.info("First image ID : " + imageId);
 
-        String imageLink = given()
-                .headers(headers)
+        //Using POJO and serialization
+        ImageDTO image = given()
                 .when()
                 .get(ImgurAPIProps.API_ACCOUNT_URL + "/{username}/image/{imageId}", username, imageId)
                 .then()
-                .statusCode(200)
-                .contentType("application/json")
+                .spec(responseSpecHTTP200)
                 .extract()
-                .response()
-                .jsonPath()
-                .getString("data.link");
+                .body()
+                .as(ImageDTO.class);
 
-        LOGGER.info("First image link : " + imageLink);
+        LOGGER.info("First image link : " + image.getImageData().getLink());
         LOGGER.info("testAccountImageIDs(): completed");
     }
 
     @Test
     public void testAccountComments() {
         LOGGER.info("testAccountComments(): started");
-        String comment = given()
-                .headers(headers)
+        CommentDTO comment = given()
                 .when()
                 .get(ImgurAPIProps.API_ACCOUNT_URL + "/{username}/comments", username)
                 .then()
-                .statusCode(200)
-                .contentType("application/json")
+                .spec(responseSpecHTTP200)
                 .extract()
-                .response()
-                .jsonPath()
-                .getString("data[0].comment");
+                .body()
+                .as(CommentDTO.class);
 
-        LOGGER.info("First comment: " + comment);
+        LOGGER.info("First comment: " + comment.getCommentData()[0].getComment());
         LOGGER.info("testAccountComments(): completed");
     }
 
@@ -135,12 +153,10 @@ public class ImgurAPITest
     public void testAccountTags() {
         LOGGER.info("testAccountTags(): started");
         String error = given()
-                .headers(headers)
                 .when()
                 .post(ImgurAPIProps.API_ACCOUNT_URL + "/me/follow/tag/moscow")
                 .then()
-                .statusCode(409)
-                .contentType("application/json")
+                .spec(responseSpecHTTP409)
                 .extract()
                 .response()
                 .jsonPath()
@@ -149,29 +165,28 @@ public class ImgurAPITest
         LOGGER.info("Error message: " + error);
 
         given()
-                .headers(headers)
+                //.headers(headers)
                 .when()
                 .post(ImgurAPIProps.API_ACCOUNT_URL + "/me/follow/tag/funny")
                 .then()
-                .statusCode(200);
+                .spec(responseSpecHTTP200);
 
         LOGGER.info("Tag #funny: followed!");
 
         given()
-                .headers(headers)
                 .when()
                 .delete(ImgurAPIProps.API_ACCOUNT_URL + "/me/follow/tag/funny")
                 .then()
-                .statusCode(200);
+                .spec(responseSpecHTTP200);
 
         LOGGER.info("Tag #funny: unfollowed!");
 
         given()
-                .headers(headers)
+                //.headers(headers)
                 .when()
                 .delete(ImgurAPIProps.API_ACCOUNT_URL + "/me/follow/tag/ny")
                 .then()
-                .statusCode(409);
+                .spec(responseSpecHTTP409);
 
         LOGGER.info("Tag #ny: is not followed!");
 
@@ -182,12 +197,10 @@ public class ImgurAPITest
     public void testAccountAvatar() {
         LOGGER.info("testAccountAvatar(): started");
         String avatarName = given()
-                .headers(headers)
                 .when()
                 .get(ImgurAPIProps.API_ACCOUNT_URL + "/{username}/avatar", username)
                 .then()
-                .statusCode(200)
-                .contentType("application/json")
+                .spec(responseSpecHTTP200)
                 .extract()
                 .response()
                 .jsonPath()
@@ -203,12 +216,10 @@ public class ImgurAPITest
     public void testAccountFavorites() {
         LOGGER.info("testAccountFavorites(): started");
         String favImageId = given()
-                .headers(headers)
                 .when()
                 .get(ImgurAPIProps.API_ACCOUNT_URL + "/{username}/favorites/0", username)
                 .then()
-                .statusCode(200)
-                .contentType("application/json")
+                .spec(responseSpecHTTP200)
                 .extract()
                 .response()
                 .jsonPath()
